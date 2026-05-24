@@ -8,6 +8,7 @@ Leave unset locally to keep using app/smartdrive.db.
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 from contextlib import contextmanager
 
@@ -26,6 +27,12 @@ def _postgres_url() -> str:
     if url.startswith('postgres://'):
         url = url.replace('postgres://', 'postgresql://', 1)
     return url
+
+
+def _pg_adapt_sql(sql: str) -> str:
+    """Convert ? placeholders and escape literal % for psycopg2."""
+    sql = sql.replace('?', '%s')
+    return re.sub(r'%(?!s)', '%%', sql)
 
 
 class DbCursor:
@@ -56,7 +63,7 @@ class DbConnection:
         if self._backend == 'postgres':
             import psycopg2.extras
 
-            sql = sql.replace('?', '%s')
+            sql = _pg_adapt_sql(sql)
             cur = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             cur.execute(sql, params)
             return DbCursor(cur, self._backend)
