@@ -1,0 +1,32 @@
+# Secrets — never push
+.env
+**/.env
+**/serviceAccountKey.json
+
+# Database & user uploads
+*.db
+app/static/uploads/profiles/*
+!app/static/uploads/profiles/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Large media / archives (GitHub limit 100 MB)
+*.mp4
+*.zip
+*.7z
+*.rar
+
+# IoT / local folders with big binaries
+FYP/
+
+# Firebase / Node
+.firebase/
+**/node_modules/
+
+# IDE / OS
+.vscode/
+.DS_Store

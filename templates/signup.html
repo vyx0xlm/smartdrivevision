@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign up | SmartDrive</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f1419; --bg-card: #1a2332; --accent: #00d4aa; --text: #e7e9ea;
+            --text-muted: #8b98a5; --border: #2f3336;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'DM Sans', sans-serif; background: var(--bg-dark); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1rem; }
+        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; width: 100%; max-width: 420px; }
+        h1 { font-size: 1.35rem; margin-bottom: 0.25rem; }
+        .sub { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.25rem; }
+        label { display: block; margin-top: 0.85rem; margin-bottom: 0.35rem; font-size: 0.88rem; color: var(--text-muted); }
+        input { width: 100%; padding: 0.65rem 0.85rem; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-dark); color: var(--text); font-size: 1rem; }
+        input:focus { outline: none; border-color: var(--accent); }
+        .btn { display: block; width: 100%; margin-top: 1.35rem; padding: 0.7rem; border: none; border-radius: 8px; background: var(--accent); color: var(--bg-dark); font-weight: 600; cursor: pointer; font-family: inherit; }
+        .btn-google { background: #fff; color: #333; border: 1px solid var(--border); margin-top: 0; }
+        .auth-divider { text-align: center; color: var(--text-muted); font-size: 0.85rem; margin: 1rem 0; }
+        .flash.success { background: rgba(0, 186, 124, 0.15); color: #00ba7c; border-color: rgba(0, 186, 124, 0.35); }
+        .links { margin-top: 1.25rem; text-align: center; font-size: 0.9rem; color: var(--text-muted); }
+        .links a { color: var(--accent); text-decoration: none; }
+        .flash { padding: 0.65rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.88rem; background: rgba(244, 33, 46, 0.12); border: 1px solid rgba(244, 33, 46, 0.35); color: #ff8a8c; }
+        .logo { text-align: center; margin-bottom: 1.5rem; font-size: 1.25rem; font-weight: 700; color: var(--accent); }
+        .hint { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem; }
+    </style>
+</head>
+<body>
+    <div class="logo">SmartDrive</div>
+    <div class="card">
+        <h1>Create account</h1>
+        <p class="sub">Family members register here to link drivers and emergency contacts.</p>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+        {% if category == 'error' %}<div class="flash">{{ message }}</div>{% endif %}
+        {% endfor %}
+        {% endwith %}
+        <div id="auth-message" class="flash" style="display:none;"></div>
+        {% if firebase_config %}
+        <button type="button" id="btn-google" class="btn btn-google">Sign up with Google</button>
+        <p class="auth-divider">or use email</p>
+        {% endif %}
+        <form method="post" action="{{ url_for('signup') }}">
+            <label for="full_name">Full name</label>
+            <input type="text" id="full_name" name="full_name" required autocomplete="name">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" required autocomplete="email">
+            <label for="phone">Your phone (optional)</label>
+            <input type="tel" id="phone" name="phone" autocomplete="tel" placeholder="For your account, not emergency SMS">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required minlength="8" autocomplete="new-password">
+            <p class="hint">At least 8 characters.</p>
+            <button type="submit" class="btn">Sign up</button>
+        </form>
+        <div class="links">Already have an account? <a href="{{ url_for('login') }}">Sign in</a></div>
+    </div>
+    {% if firebase_config %}
+    <script>window.FIREBASE_CONFIG = {{ firebase_config | tojson }};</script>
+    <script type="module" src="{{ url_for('static', filename='js/firebase-auth.js') }}"></script>
+    {% endif %}
+</body>
+</html>

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ driver.name }}{% endblock %}
+{% block content %}
+<h1 class="page-title">Edit driver</h1>
+<p class="page-sub">Emergency contacts are edited on the <a href="{{ url_for('emergency_contacts_page') }}" style="color: var(--accent);">Emergency contacts</a> page.</p>
+
+<div class="card">
+    <form method="post" action="{{ url_for('edit_driver', driver_id=driver.id) }}">
+        <label for="name">Driver Name *</label>
+        <input type="text" id="name" name="name" required value="{{ driver.name }}">
+
+        <label for="phone">Driver Phone Number *</label>
+        <input type="tel" id="phone" name="phone" required value="{{ driver.phone }}">
+
+        <label for="email">Email (optional)</label>
+        <input type="email" id="email" name="email" value="{{ driver.email or '' }}">
+
+        <label for="vehicle_info">Vehicle Info (optional)</label>
+        <input type="text" id="vehicle_info" name="vehicle_info" value="{{ driver.vehicle_info or '' }}">
+
+        <label for="device_id">IoT Device ID (optional)</label>
+        <input type="text" id="device_id" name="device_id" value="{{ driver.device_id or '' }}">
+
+        <div style="margin-top: 1.5rem; display: flex; gap: 0.75rem;">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ url_for('driver_detail', driver_id=driver.id) }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SmartDrive Vision{% endblock %} | Driver Drowsiness App</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f1419;
+            --bg-card: #1a2332;
+            --bg-hover: #243044;
+            --accent: #00d4aa;
+            --accent-dim: #00a884;
+            --text: #e7e9ea;
+            --text-muted: #8b98a5;
+            --danger: #f4212e;
+            --success: #00ba7c;
+            --border: #2f3336;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'DM Sans', -apple-system, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+        .container { max-width: 720px; margin: 0 auto; padding: 1rem; }
+        .container-wide { max-width: 960px; margin: 0 auto; padding: 1rem; }
+        header {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            padding: 0.85rem 0;
+            margin-bottom: 1.25rem;
+        }
+        header .wrap {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 0 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        .logo {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .logo span { color: var(--text-muted); font-weight: 400; font-size: 0.85rem; }
+        nav.main-nav {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.35rem 1rem;
+        }
+        nav.main-nav a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.88rem;
+            transition: color 0.2s;
+        }
+        nav.main-nav a:hover { color: var(--accent); }
+        nav.main-nav a.active { color: var(--accent); font-weight: 600; }
+        nav.main-nav .sep { color: var(--border); user-select: none; }
+        .flash-wrap { max-width: 960px; margin: 0 auto 1rem; padding: 0 1rem; }
+        .flash {
+            padding: 0.65rem 1rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+        .flash.success { background: rgba(0, 186, 124, 0.15); color: var(--success); border: 1px solid rgba(0, 186, 124, 0.35); }
+        .flash.error { background: rgba(244, 33, 46, 0.12); color: #ff8a8c; border: 1px solid rgba(244, 33, 46, 0.35); }
+        .btn {
+            display: inline-block;
+            padding: 0.55rem 1rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.88rem;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+        .btn-sm { padding: 0.4rem 0.75rem; font-size: 0.82rem; }
+        .btn-primary {
+            background: var(--accent);
+            color: var(--bg-dark);
+        }
+        .btn-primary:hover { background: var(--accent-dim); }
+        .btn-secondary {
+            background: var(--bg-hover);
+            color: var(--text);
+        }
+        .btn-secondary:hover { background: var(--border); }
+        .btn-danger {
+            background: rgba(244, 33, 46, 0.2);
+            color: var(--danger);
+        }
+        .btn-danger:hover { background: rgba(244, 33, 46, 0.35); }
+        .card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+        }
+        .card h2 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+        .card p { color: var(--text-muted); font-size: 0.9rem; }
+        form label {
+            display: block;
+            margin-top: 1rem;
+            margin-bottom: 0.25rem;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+        form input, form select, form textarea {
+            width: 100%;
+            padding: 0.65rem 0.85rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-dark);
+            color: var(--text);
+            font-size: 1rem;
+            font-family: inherit;
+        }
+        form input:focus, form textarea:focus, form select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .form-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+        .form-row > * { flex: 1; min-width: 140px; }
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        .checkbox-row input[type="checkbox"] { width: auto; }
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+        }
+        .empty-state a { color: var(--accent); }
+        .alert-badge {
+            display: inline-block;
+            background: rgba(244, 33, 46, 0.2);
+            color: var(--danger);
+            font-size: 0.75rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            margin-left: 0.5rem;
+        }
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.1rem;
+        }
+        .stat-card .num { font-size: 1.75rem; font-weight: 700; color: var(--accent); }
+        .stat-card .lbl { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem; }
+        table.data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        table.data-table th, table.data-table td {
+            text-align: left;
+            padding: 0.65rem 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        table.data-table th { color: var(--text-muted); font-weight: 500; font-size: 0.82rem; }
+        table.data-table tr:last-child td { border-bottom: none; }
+        code.inline { background: var(--bg-dark); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85em; }
+        footer { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.85rem; }
+        h1.page-title { font-size: 1.45rem; margin-bottom: 0.35rem; }
+        .page-sub { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.25rem; }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <header>
+        <div class="wrap">
+            <a href="{{ url_for('dashboard') if current_user.is_authenticated else url_for('login') }}" class="logo">SmartDrive Vision</a>
+            {% if current_user.is_authenticated %}
+            <nav class="main-nav">
+                <a href="{{ url_for('dashboard') }}" class="{{ 'active' if request.endpoint == 'dashboard' else '' }}">Dashboard</a>
+                <a href="{{ url_for('emergency_contacts_page') }}" class="{{ 'active' if 'emergency_contact' in (request.endpoint or '') or request.endpoint == 'emergency_contacts_page' else '' }}">Emergency contacts</a>
+                <a href="{{ url_for('alerts_log') }}" class="{{ 'active' if request.endpoint == 'alerts_log' else '' }}">Alert log</a>
+                <span class="sep">|</span>
+                <a href="{{ url_for('profile') }}" class="{{ 'active' if request.endpoint in ['profile','profile_password'] else '' }}">Profile</a>
+                <a href="{{ url_for('logout') }}">Sign out</a>
+            </nav>
+            {% else %}
+            <nav class="main-nav">
+                <a href="{{ url_for('login') }}">Sign in</a>
+                <a href="{{ url_for('signup') }}" class="btn btn-primary btn-sm">Sign up</a>
+            </nav>
+            {% endif %}
+        </div>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flash-wrap">
+        {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <main class="{% block main_class %}container{% endblock %}">
+        {% block content %}{% endblock %}
+    </main>
+    <footer>SmartDrive — IoT driver drowsiness detection &amp; family alerts</footer>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Emergency contacts{% endblock %}
+{% block main_class %}container-wide{% endblock %}
+{% block content %}
+<h1 class="page-title">Emergency contacts</h1>
+<p class="page-sub">People who receive GSM SMS when drowsiness is detected. Linked to your profile as the driver.</p>
+
+<div style="margin-bottom: 1rem;">
+    <a href="{{ url_for('emergency_contact_add') }}" class="btn btn-primary">+ Add emergency contact</a>
+</div>
+
+{% if contacts %}
+<div class="card" style="padding: 0; overflow: hidden;">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Contact</th>
+                <th>Phone</th>
+                <th>Relationship</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in contacts %}
+            <tr>
+                <td><strong>{{ c.name }}</strong>{% if c.is_primary %} <span class="alert-badge">Primary</span>{% endif %}</td>
+                <td><a href="tel:{{ c.phone }}" style="color: var(--accent);">{{ c.phone }}</a></td>
+                <td>{{ c.relationship or '—' }}</td>
+                <td style="white-space: nowrap;">
+                    <a href="{{ url_for('emergency_contact_edit', contact_id=c.id) }}" class="btn btn-secondary btn-sm">Edit</a>
+                    <form action="{{ url_for('emergency_contact_delete', contact_id=c.id) }}" method="post" style="display: inline;" onsubmit="return confirm('Remove this contact?');">
+                        <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state card">
+    <p style="font-size: 1.05rem; margin-bottom: 0.5rem;">No emergency contacts</p>
+    <p>Add family or friends who should be alerted when your IoT system sends SMS via GSM.</p>
+    <a href="{{ url_for('emergency_contact_add') }}" class="btn btn-primary" style="margin-top: 1rem;">Add first contact</a>
+</div>
+{% endif %}
+{% endblock %}

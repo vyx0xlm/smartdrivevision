@@ -1,0 +1,34 @@
+# PythonAnywhere WSGI entry point
+#
+# PythonAnywhere default folder: /home/YOUR_USERNAME/mysite
+# Put app.py, templates/, static/, etc. directly in mysite/
+#
+# 1. Copy this file to /home/YOUR_USERNAME/mysite/wsgi.py (optional — or paste into Web tab WSGI editor)
+# 2. Web tab → WSGI file → edit /var/www/YOUR_USERNAME_pythonanywhere_com_wsgi.py
+# 3. Web tab → Virtualenv → /home/YOUR_USERNAME/mysite/venv
+# 4. Web tab → Static files → /static/ → /home/YOUR_USERNAME/mysite/static/
+# 5. Reload web app
+
+import os
+import sys
+
+# Folder that contains app.py (PythonAnywhere default: ~/mysite)
+PROJECT_DIR = '/home/alyaa/mysite'
+
+if not os.path.isdir(PROJECT_DIR):
+    raise RuntimeError(
+        f'PROJECT_DIR does not exist: {PROJECT_DIR}. '
+        'Edit wsgi.py and set the correct path (usually /home/YOUR_USERNAME/mysite).'
+    )
+
+if PROJECT_DIR not in sys.path:
+    sys.path.insert(0, PROJECT_DIR)
+
+os.chdir(PROJECT_DIR)
+
+from dotenv import load_dotenv
+load_dotenv(os.path.join(PROJECT_DIR, '.env'))
+
+from app import app as application, init_db
+
+init_db()

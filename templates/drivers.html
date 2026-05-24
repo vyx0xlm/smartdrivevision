@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Drivers{% endblock %}
+{% block content %}
+<h1 class="page-title">Drivers</h1>
+<p class="page-sub">Register each driver who uses the vehicle with your drowsiness detection setup. Emergency SMS recipients are managed separately under <strong>Emergency contacts</strong>.</p>
+
+<p style="margin-bottom: 1rem;"><a href="{{ url_for('register_driver') }}" class="btn btn-primary">+ Register driver</a></p>
+
+{% if drivers %}
+{% for d in drivers %}
+<div class="card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+    <div>
+        <h2>{{ d.name }}</h2>
+        {% if d.driver_code %}<p><strong>Driver ID:</strong> <code class="inline">{{ d.driver_code }}</code></p>{% endif %}
+        <p>{{ d.phone }}{% if d.vehicle_info %} · {{ d.vehicle_info }}{% endif %}</p>
+        <p style="margin-top: 0.35rem;">
+            <span class="alert-badge">{{ d.contact_count or 0 }} emergency contact{{ 's' if (d.contact_count or 0) != 1 else '' }}</span>
+        </p>
+    </div>
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <a href="{{ url_for('driver_detail', driver_id=d.id) }}" class="btn btn-primary">View driver</a>
+        <a href="{{ url_for('edit_driver', driver_id=d.id) }}" class="btn btn-secondary">Edit</a>
+        <form action="{{ url_for('delete_driver', driver_id=d.id) }}" method="post" style="display: inline;" onsubmit="return confirm('Delete this driver and all linked emergency contacts?');">
+            <button type="submit" class="btn btn-danger">Delete</button>
+        </form>
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="empty-state card">
+    <p style="font-size: 1.05rem; margin-bottom: 0.5rem;">No drivers yet</p>
+    <p>Add a driver profile, then add emergency contacts in the dedicated Emergency contacts section.</p>
+    <a href="{{ url_for('register_driver') }}" class="btn btn-primary" style="margin-top: 1rem;">Register first driver</a>
+</div>
+{% endif %}
+{% endblock %}

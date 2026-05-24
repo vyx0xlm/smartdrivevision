@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block head %}
+{% if show_onboarding %}
+<style>
+.onboarding-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1000;
+    display: flex; align-items: center; justify-content: center; padding: 1rem;
+}
+.onboarding-card {
+    background: var(--bg-card); border: 1px solid var(--accent); border-radius: 12px;
+    max-width: 520px; width: 100%; padding: 1.5rem; max-height: 90vh; overflow-y: auto;
+}
+.onboarding-card h2 { color: var(--accent); margin-bottom: 0.75rem; font-size: 1.2rem; }
+.onboarding-card ol { margin: 0.75rem 0 1rem 1.25rem; color: var(--text-muted); font-size: 0.92rem; }
+.onboarding-card li { margin-bottom: 0.5rem; }
+.onboarding-card .step-num { color: var(--accent); font-weight: 700; }
+</style>
+{% endif %}
+{% endblock %}
+{% block content %}
+{% if show_onboarding %}
+<div class="onboarding-overlay" id="onboarding-guide">
+    <div class="onboarding-card">
+        <h2>Welcome to SmartDrive — quick start</h2>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem;">
+            Follow these steps to set up drowsiness alerts for your family:
+        </p>
+        <ol>
+            <li><span class="step-num">1.</span> <strong>Complete your profile</strong> — name, phone, and vehicle details.</li>
+            <li><span class="step-num">2.</span> <strong>Add emergency contacts</strong> — family/friends who receive GSM SMS when drowsiness is detected.</li>
+            <li><span class="step-num">3.</span> <strong>Set a primary contact</strong> — they get SMS first and receive phone calls.</li>
+            <li><span class="step-num">4.</span> <strong>Link your Raspberry Pi</strong> — use your <code class="inline">driver_code</code> from Profile.</li>
+            <li><span class="step-num">5.</span> <strong>Check the alert log</strong> — events appear here when the Pi reports an alert.</li>
+        </ol>
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+            <a href="{{ url_for('profile') }}" class="btn btn-primary">Go to profile</a>
+            <button type="button" class="btn btn-secondary" id="dismiss-guide">Got it</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+<h1 class="page-title">Welcome{% if current_user.full_name %}, {{ current_user.full_name.strip().split()[0] }}{% endif %}</h1>
+<p class="page-sub">SmartDrive Vision is a driver drowsiness monitoring platform that links Raspberry Pi detection with emergency SMS/call alerts to registered family contacts.</p>
+
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="num">{{ stats.contacts }}</div>
+        <div class="lbl">Emergency contacts</div>
+    </div>
+    <div class="stat-card">
+        <div class="num">{{ stats.alerts_month }}</div>
+        <div class="lbl">Alerts (last 30 days)</div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Quick actions</h2>
+    <p style="margin-bottom: 1rem;">Jump to the parts of the system that matter for your FYP demo.</p>
+    <div style="display: flex; flex-wrap: wrap; gap: 0.6rem;">
+        <a href="{{ url_for('profile') }}" class="btn btn-primary">Edit profile</a>
+        <a href="{{ url_for('emergency_contact_add') }}" class="btn btn-secondary">Add emergency contact</a>
+        <a href="{{ url_for('alerts_log') }}" class="btn btn-secondary">View alert log</a>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Recent alert activity</h2>
+    <!-- <p style="margin-bottom: 0.75rem;">Logged when your IoT posts to <code class="inline">POST /api/alert</code> after GSM notifications.</p> -->
+    {% if recent_alerts %}
+    <table class="data-table">
+        <thead>
+            <tr><th>When</th><th>Driver</th><th>Message</th></tr>
+        </thead>
+        <tbody>
+            {% for a in recent_alerts %}
+            <tr>
+                <td style="white-space: nowrap; font-size: 0.85rem;">{{ a.created_at_local or a.created_at }}</td>
+                <td>{{ a.driver_name or '—' }}</td>
+                <td>{{ a.message[:80] }}{% if a.message|length > 80 %}…{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p style="margin-top: 0.75rem;"><a href="{{ url_for('alerts_log') }}" style="color: var(--accent);">View full alert log →</a></p>
+    {% else %}
+    <p style="color: var(--text-muted);">No alerts logged yet. When your Raspberry Pi detects drowsiness and notifies contacts via GSM, call the API to record an entry here.</p>
+    {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+{% if show_onboarding %}
+<script>
+document.getElementById('dismiss-guide')?.addEventListener('click', async () => {
+  document.getElementById('onboarding-guide').style.display = 'none';
+  await fetch('{{ url_for("onboarding_complete") }}', { method: 'POST', credentials: 'same-origin' });
+});
+</script>
+{% endif %}
+{% endblock %}

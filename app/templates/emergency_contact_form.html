@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if mode == 'edit' else 'Add' }} emergency contact{% endblock %}
+{% block content %}
+<h1 class="page-title">{{ 'Edit emergency contact' if mode == 'edit' else 'Add emergency contact' }}</h1>
+<p class="page-sub">Contacts are saved for your driver profile. Update your details under <a href="{{ url_for('profile') }}" style="color: var(--accent);">Profile</a>.</p>
+
+<div class="card">
+    <form method="post">
+        <label for="name">Contact name *</label>
+        <input type="text" id="name" name="name" required value="{{ (form_data.get('name') if form_data else (contact.name if contact else '')) }}" placeholder="e.g. Sarah (spouse)">
+
+        <label for="phone">Phone number *</label>
+        <input type="tel" id="phone" name="phone" required value="{{ (form_data.get('phone') if form_data else (contact.phone if contact else '')) }}" placeholder="Number that receives GSM SMS">
+
+        <label for="relationship">Relationship (optional)</label>
+        <input type="text" id="relationship" name="relationship" value="{{ (form_data.get('relationship') if form_data else (contact.relationship if contact else '')) }}" placeholder="e.g. Parent, sibling">
+
+        <div class="checkbox-row">
+            <input type="checkbox" id="is_primary" name="is_primary" {% if (form_data and form_data.get('is_primary') == 'on') or (not form_data and contact and contact.is_primary) %}checked{% endif %}>
+            <label for="is_primary" style="margin: 0;">Primary contact (SMS + phone call)</label>
+        </div>
+
+        {% if replace_required and existing_primary %}
+        <div class="card" style="margin-top: 1rem; padding: 0.85rem; background: rgba(244, 33, 46, 0.12); border-color: rgba(244, 33, 46, 0.35);">
+            <p style="color: #ffb3b5; font-size: 0.88rem;">
+                Current primary: <strong>{{ existing_primary.name }}</strong> ({{ existing_primary.phone }}).
+                Confirm to replace this primary contact.
+            </p>
+            <div class="checkbox-row" style="margin-top: 0.6rem;">
+                <input type="checkbox" id="confirm_replace_primary" name="confirm_replace_primary">
+                <label for="confirm_replace_primary" style="margin: 0;">Yes, replace existing primary contact</label>
+            </div>
+        </div>
+        {% endif %}
+
+        <div style="margin-top: 1.5rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
+            <button type="submit" class="btn btn-primary">{{ 'Save changes' if mode == 'edit' else 'Add contact' }}</button>
+            <a href="{{ url_for('emergency_contacts_page') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

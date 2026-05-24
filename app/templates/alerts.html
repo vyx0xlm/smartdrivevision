@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Alert log{% endblock %}
+{% block main_class %}container-wide{% endblock %}
+{% block content %}
+<h1 class="page-title">Alert log</h1>
+<!--<p class="page-sub">Timestamped record when your Raspberry Pi reports a drowsiness event after notifying emergency contacts via GSM. Helps demonstrate the full IoT → notification pipeline for your project.</p> -->
+
+{% if alerts %}
+<div class="card" style="padding: 0; overflow: hidden;">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Time (UTC+8)</th>
+                <th>Alert type</th>
+                <th>Recipients</th>
+                <th>Source</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in alerts %}
+            <tr>
+                <td style="white-space: nowrap; font-size: 0.85rem;">{{ a.created_at_local or a.created_at }}</td>
+                <td>{{ a.alert_type or 'SMS' }}</td>
+                <td>
+                    {% if a.alert_recipients %}
+                        {% for recipient in a.alert_recipients.split('\n') %}
+                            {{ recipient }}{% if not loop.last %}<br>{% endif %}
+                        {% endfor %}
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td><code class="inline">{{ a.source or 'iot' }}</code></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state card">
+    <p>No alerts recorded yet.</p>
+    <!-- <p style="margin-top: 0.5rem; font-size: 0.9rem;">From your Pi, after sending SMS, call:</p> -->
+    <!-- <p style="margin-top: 0.5rem;"><code class="inline">POST /api/alert</code> with JSON <code class="inline">{"device_id": "YOUR_DEVICE_ID"}</code></p> -->
+    <a href="{{ url_for('profile') }}" class="btn btn-secondary" style="margin-top: 1rem;">Complete your profile</a>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ driver.name }}{% endblock %}
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;">
+    <div>
+        <h1 class="page-title">{{ driver.name }}</h1>
+        <p class="page-sub" style="margin-bottom: 0;">Driver profile — emergency contacts are managed in <a href="{{ url_for('emergency_contacts_page') }}" style="color: var(--accent);">Emergency contacts</a>.</p>
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+        <a href="{{ url_for('edit_driver', driver_id=driver.id) }}" class="btn btn-secondary">Edit driver</a>
+        <a href="{{ url_for('emergency_contact_add') }}" class="btn btn-primary">Add emergency contact</a>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Driver details</h2>
+    {% if driver.driver_code %}<p><strong>Driver ID:</strong> <code class="inline">{{ driver.driver_code }}</code></p>{% endif %}
+    <p><strong>Phone:</strong> {{ driver.phone }}</p>
+    {% if driver.email %}<p><strong>Email:</strong> {{ driver.email }}</p>{% endif %}
+    {% if driver.vehicle_info %}<p><strong>Vehicle:</strong> {{ driver.vehicle_info }}</p>{% endif %}
+    {% if driver.device_id %}<p><strong>Device ID:</strong> <code class="inline">{{ driver.device_id }}</code></p>{% endif %}
+</div>
+
+<div class="card">
+    <h2>Emergency contacts (summary)</h2>
+    <p style="margin-bottom: 0.75rem;">Full list, add, edit, and remove contacts on the <a href="{{ url_for('emergency_contacts_page') }}" style="color: var(--accent);">Emergency contacts</a> page — not on Profile.</p>
+    {% if contacts %}
+    <table class="data-table">
+        <thead><tr><th>Name</th><th>Phone</th><th>Note</th></tr></thead>
+        <tbody>
+            {% for c in contacts %}
+            <tr>
+                <td>{{ c.name }}{% if c.is_primary %} <span class="alert-badge">Primary</span>{% endif %}</td>
+                <td><a href="tel:{{ c.phone }}" style="color: var(--accent);">{{ c.phone }}</a></td>
+                <td>{{ c.relationship or '—' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: var(--text-muted);">No contacts yet. <a href="{{ url_for('emergency_contact_add') }}" style="color: var(--accent);">Add emergency contacts →</a></p>
+    {% endif %}
+</div>
+
+<p><a href="{{ url_for('drivers_list') }}" class="btn btn-secondary">← Back to drivers</a></p>
+{% endblock %}

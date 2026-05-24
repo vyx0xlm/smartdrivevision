@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+{% block title %}Profile{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css">
+<style>
+.profile-header { display: flex; align-items: flex-start; gap: 1.25rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+.profile-avatar {
+    width: 96px; height: 96px; border-radius: 50%; object-fit: cover;
+    border: 2px solid var(--accent); background: var(--bg-dark); flex-shrink: 0;
+}
+.profile-avatar-placeholder {
+    width: 96px; height: 96px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; background: var(--bg-dark); border: 2px dashed var(--border);
+    color: var(--text-muted); font-size: 2rem; flex-shrink: 0;
+}
+.profile-meta { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.35rem; }
+.profile-picture-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.65rem; align-items: center; }
+.profile-picture-actions input[type="file"] { display: none; }
+
+.photo-crop-modal {
+    position: fixed; inset: 0; z-index: 2000; background: rgba(0, 0, 0, 0.82);
+    display: none; align-items: center; justify-content: center; padding: 1rem;
+}
+.photo-crop-modal.open { display: flex; }
+.photo-crop-dialog {
+    width: 100%; max-width: 480px; margin: 0; max-height: 92vh; overflow-y: auto;
+}
+.photo-crop-stage {
+    width: 100%; max-height: 340px; background: var(--bg-dark); border-radius: 8px;
+    overflow: hidden; margin: 1rem 0 0.75rem;
+}
+.photo-crop-stage img { display: block; max-width: 100%; }
+.photo-crop-stage .cropper-view-box,
+.photo-crop-stage .cropper-face { border-radius: 50%; }
+.photo-crop-zoom {
+    display: flex; align-items: center; gap: 0.65rem; margin-bottom: 1rem;
+}
+.photo-crop-zoom label { margin: 0; font-size: 0.85rem; color: var(--text-muted); white-space: nowrap; }
+.photo-crop-zoom input[type="range"] { flex: 1; accent-color: var(--accent); }
+.photo-crop-zoom .zoom-btn {
+    width: 2.25rem; height: 2.25rem; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg-hover); color: var(--text); font-size: 1.2rem; line-height: 1;
+    cursor: pointer; font-family: inherit;
+}
+.photo-crop-zoom .zoom-btn:hover { background: var(--border); }
+.photo-crop-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+</style>
+{% endblock %}
+{% block content %}
+<h1 class="page-title">Profile</h1>
+<p class="page-sub">Your account and driver details for the IoT drowsiness system. Emergency SMS recipients are under <a href="{{ url_for('emergency_contacts_page') }}" style="color: var(--accent);">Emergency contacts</a>.</p>
+
+<div class="card">
+    <h2>Driver profile</h2>
+    <form method="post" action="{{ url_for('profile') }}" enctype="multipart/form-data" id="profile-form">
+        <div class="profile-header">
+            {% if user.profile_picture %}
+            <img src="{{ url_for('static', filename=user.profile_picture) }}" alt="Profile photo" class="profile-avatar" id="avatar-preview" data-original-src="{{ url_for('static', filename=user.profile_picture) }}">
+            {% else %}
+            <div class="profile-avatar-placeholder" id="avatar-preview" data-original-src="">👤</div>
+            {% endif %}
+            <div>
+                <label for="profile_picture" style="margin-bottom: 0;">Profile picture</label>
+                <p class="profile-meta">Upload a photo, then drag and zoom to frame it how you like.</p>
+                <div class="profile-picture-actions">
+                    <label for="profile_picture" class="btn btn-secondary btn-sm" style="cursor: pointer; margin: 0;">
+                        {{ 'Change photo' if user.profile_picture else 'Upload photo' }}
+                    </label>
+                    <input type="file" id="profile_picture" name="profile_picture" accept="image/png,image/jpeg,image/webp,image/gif">
+                    <button type="button" class="btn btn-secondary btn-sm" id="adjust-photo-btn" style="display: none;">Adjust photo</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="cancel-photo-change" style="display: none;">Cancel change</button>
+                    {% if user.profile_picture %}
+                    <button type="submit" form="delete-photo-form" class="btn btn-danger btn-sm" onclick="return confirm('Remove your profile picture?');">Remove photo</button>
+                    {% endif %}
+                </div>
+                <p class="profile-meta" id="photo-pending-note" style="display: none; color: var(--accent);">New photo ready — click Save profile to apply.</p>
+            </div>
+        </div>
+
+        <label for="full_name">Full name *</label>
+        <input type="text" id="full_name" name="full_name" required value="{{ user.full_name }}">
+
+        <label for="email">Email *</label>
+        <input type="email" id="email" name="email" required value="{{ user.email }}">
+
+        <label for="phone">Phone number *</label>
+        <input type="tel" id="phone" name="phone" required value="{{ user.phone or '' }}" placeholder="e.g. +60123456789">
+
+        <label for="vehicle_info">Vehicle info (optional)</label>
+        <input type="text" id="vehicle_info" name="vehicle_info" value="{{ driver.vehicle_info or '' }}" placeholder="e.g. Proton X70, ABC 1234">
+
+        {% if driver.driver_code %}
+        <p class="profile-meta">Driver code for Raspberry Pi API: <code class="inline">{{ driver.driver_code }}</code></p>
+        {% endif %}
+
+        <button type="submit" class="btn btn-primary" style="margin-top: 1.25rem;">Save profile</button>
+    </form>
+    {% if user.profile_picture %}
+    <form method="post" action="{{ url_for('profile_picture_delete') }}" id="delete-photo-form" style="display: none;"></form>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>Change password</h2>
+    {% if has_local_password %}
+    <form method="post" action="{{ url_for('profile_password') }}">
+        <label for="current_password">Current password</label>
+        <input type="password" id="current_password" name="current_password" required autocomplete="current-password">
+
+        <label for="new_password">New password</label>
+        <input type="password" id="new_password" name="new_password" required minlength="8" autocomplete="new-password">
+
+        <button type="submit" class="btn btn-secondary" style="margin-top: 1rem;">Update password</button>
+    </form>
+    {% else %}
+    <p class="profile-meta">You signed in with Google. Manage your password in your Google account settings.</p>
+    {% endif %}
+</div>
+
+<div class="photo-crop-modal" id="photo-crop-modal" aria-hidden="true">
+    <div class="photo-crop-dialog card">
+        <h2>Adjust profile photo</h2>
+        <p class="profile-meta">Drag to reposition. Use the slider or +/− to zoom in or out.</p>
+        <div class="photo-crop-stage">
+            <img id="photo-crop-image" alt="Crop preview">
+        </div>
+        <div class="photo-crop-zoom">
+            <button type="button" class="zoom-btn" id="zoom-out" title="Zoom out">−</button>
+            <label for="zoom-slider">Zoom</label>
+            <input type="range" id="zoom-slider" min="0.2" max="3" step="0.01" value="1">
+            <button type="button" class="zoom-btn" id="zoom-in" title="Zoom in">+</button>
+        </div>
+        <div class="photo-crop-actions">
+            <button type="button" class="btn btn-primary" id="apply-crop">Apply</button>
+            <button type="button" class="btn btn-secondary" id="cancel-crop">Cancel</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
+<script>
+(function () {
+  const fileInput = document.getElementById('profile_picture');
+  const cancelBtn = document.getElementById('cancel-photo-change');
+  const adjustBtn = document.getElementById('adjust-photo-btn');
+  const pendingNote = document.getElementById('photo-pending-note');
+  const modal = document.getElementById('photo-crop-modal');
+  const cropImage = document.getElementById('photo-crop-image');
+  const zoomSlider = document.getElementById('zoom-slider');
+  const applyBtn = document.getElementById('apply-crop');
+  const cancelCropBtn = document.getElementById('cancel-crop');
+  const zoomInBtn = document.getElementById('zoom-in');
+  const zoomOutBtn = document.getElementById('zoom-out');
+
+  let preview = document.getElementById('avatar-preview');
+  const originalSrc = preview?.dataset.originalSrc || '';
+  let cropper = null;
+  let hasPendingPhoto = false;
+  let modalOpenedFromFile = false;
+
+  function updateAdjustButton() {
+    const hasImage = preview && preview.tagName === 'IMG' && preview.src;
+    if (adjustBtn) adjustBtn.style.display = hasImage ? 'inline-flex' : 'none';
+  }
+
+  function setPreviewImage(src) {
+    if (!preview) return;
+    if (preview.tagName !== 'IMG') {
+      const img = document.createElement('img');
+      img.id = 'avatar-preview';
+      img.className = 'profile-avatar';
+      img.dataset.originalSrc = originalSrc;
+      preview.replaceWith(img);
+      preview = img;
+    }
+    preview.src = src;
+    updateAdjustButton();
+  }
+
+  function setFileOnInput(file) {
+    if (!fileInput) return;
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    fileInput.files = dt.files;
+  }
+
+  function markPending() {
+    hasPendingPhoto = true;
+    if (cancelBtn) cancelBtn.style.display = 'inline-flex';
+    if (pendingNote) pendingNote.style.display = 'block';
+  }
+
+  function clearPending() {
+    hasPendingPhoto = false;
+    if (fileInput) fileInput.value = '';
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    if (pendingNote) pendingNote.style.display = 'none';
+  }
+
+  function resetPreview() {
+    clearPending();
+    if (!preview) return;
+    if (originalSrc) {
+      setPreviewImage(originalSrc);
+    } else if (preview.tagName === 'IMG') {
+      const placeholder = document.createElement('div');
+      placeholder.id = 'avatar-preview';
+      placeholder.className = 'profile-avatar-placeholder';
+      placeholder.dataset.originalSrc = '';
+      placeholder.textContent = '👤';
+      preview.replaceWith(placeholder);
+      preview = placeholder;
+    }
+    updateAdjustButton();
+  }
+
+  function destroyCropper() {
+    if (cropper) {
+      cropper.destroy();
+      cropper = null;
+    }
+    cropImage.removeAttribute('src');
+  }
+
+  function closeCropModal(revertFilePick) {
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    destroyCropper();
+    if (revertFilePick && modalOpenedFromFile && !hasPendingPhoto) {
+      if (fileInput) fileInput.value = '';
+      if (!originalSrc && preview?.tagName === 'IMG') {
+        resetPreview();
+      }
+    }
+    modalOpenedFromFile = false;
+  }
+
+  function syncZoomSlider() {
+    if (!cropper || !zoomSlider) return;
+    const ratio = cropper.getImageData().ratio || 1;
+    zoomSlider.value = Math.min(3, Math.max(0.2, ratio)).toFixed(2);
+  }
+
+  function openCropModal(src, fromFile) {
+    modalOpenedFromFile = !!fromFile;
+    destroyCropper();
+    cropImage.src = src;
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+
+    cropImage.onload = () => {
+      cropper = new Cropper(cropImage, {
+        aspectRatio: 1,
+        viewMode: 1,
+        dragMode: 'move',
+        autoCropArea: 1,
+        responsive: true,
+        background: false,
+        guides: false,
+        center: true,
+        highlight: false,
+        cropBoxMovable: false,
+        cropBoxResizable: false,
+        toggleDragModeOnDblclick: false,
+        ready() {
+          syncZoomSlider();
+        },
+        zoom() {
+          syncZoomSlider();
+        },
+      });
+    };
+  }
+
+  function applyCrop() {
+    if (!cropper) return;
+    const canvas = cropper.getCroppedCanvas({
+      width: 512,
+      height: 512,
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high',
+    });
+    if (!canvas) return;
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const file = new File([blob], 'profile.jpg', { type: 'image/jpeg' });
+      setFileOnInput(file);
+      setPreviewImage(canvas.toDataURL('image/jpeg', 0.92));
+      markPending();
+      closeCropModal(false);
+    }, 'image/jpeg', 0.92);
+  }
+
+  fileInput?.addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => openCropModal(reader.result, true);
+    reader.readAsDataURL(file);
+  });
+
+  adjustBtn?.addEventListener('click', () => {
+    if (preview?.tagName === 'IMG' && preview.src) {
+      openCropModal(preview.src, false);
+    }
+  });
+
+  cancelBtn?.addEventListener('click', resetPreview);
+
+  zoomSlider?.addEventListener('input', () => {
+    if (cropper) cropper.zoomTo(parseFloat(zoomSlider.value));
+  });
+
+  zoomInBtn?.addEventListener('click', () => cropper?.zoom(0.08));
+  zoomOutBtn?.addEventListener('click', () => cropper?.zoom(-0.08));
+
+  applyBtn?.addEventListener('click', applyCrop);
+  cancelCropBtn?.addEventListener('click', () => closeCropModal(true));
+
+  modal?.addEventListener('click', (e) => {
+    if (e.target === modal) closeCropModal(true);
+  });
+
+  updateAdjustButton();
+})();
+</script>
+{% endblock %}

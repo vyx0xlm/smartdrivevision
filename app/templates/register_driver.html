@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Register driver{% endblock %}
+{% block content %}
+<h1 class="page-title">Register driver</h1>
+<p class="page-sub">Driver profile only. Add GSM SMS recipients under <a href="{{ url_for('emergency_contacts_page') }}" style="color: var(--accent);">Emergency contacts</a>.</p>
+
+<div class="card">
+    <form method="post" action="{{ url_for('register_driver') }}">
+        <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+            Pre-filled from your account profile — edit if the driver uses different details.
+        </p>
+        <label for="name">Driver Name *</label>
+        <input type="text" id="name" name="name" required placeholder="e.g. Ahmad bin Ali"
+               value="{{ profile_defaults.name if profile_defaults else '' }}">
+
+        <label for="phone">Driver Phone Number *</label>
+        <input type="tel" id="phone" name="phone" required placeholder="e.g. +60123456789"
+               value="{{ profile_defaults.phone if profile_defaults else '' }}">
+
+        <label for="email">Email (optional)</label>
+        <input type="email" id="email" name="email" placeholder="driver@example.com"
+               value="{{ profile_defaults.email if profile_defaults else '' }}">
+
+        <label for="vehicle_info">Vehicle Info (optional)</label>
+        <input type="text" id="vehicle_info" name="vehicle_info" placeholder="e.g. Proton X70, ABC 1234">
+
+        <!-- <label for="device_id">IoT Device ID (optional)</label>
+        <input type="text" id="device_id" name="device_id" placeholder="e.g. ESP32_001">
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">
+            Use this if your IoT device fetches emergency contacts by device ID.
+        </p> -->
+
+        <div style="margin-top: 1.5rem; display: flex; gap: 0.75rem;">
+            <button type="submit" class="btn btn-primary">Register driver</button>
+            <a href="{{ url_for('drivers_list') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
