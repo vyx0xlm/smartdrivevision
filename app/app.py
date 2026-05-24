@@ -51,7 +51,12 @@ from data_store import (
     upsert_firebase_user,
     use_firestore,
 )
-from firebase_service import firebase_enabled, get_firebase_web_config, verify_id_token
+from firebase_service import (
+    delete_firebase_auth_user,
+    firebase_enabled,
+    get_firebase_web_config,
+    verify_id_token,
+)
 from email_service import mail_configured, send_password_reset_email
 
 app = Flask(__name__)
@@ -287,6 +292,34 @@ def _profile_context(conn, user_id):
         'driver': driver,
         'has_local_password': bool(user['password_hash']),
     }
+
+
+def _delete_user_account(conn, user_id):
+    """Remove user and related driver, contacts, alerts, and reset tokens."""
+    user = conn.execute(
+        'SELECT profile_picture, firebase_uid FROM users WHERE id = ?', (user_id,)
+    ).fetchone()
+    if not user:
+        return False
+
+    driver_ids = [
+        r['id'] for r in conn.execute(
+            'SELECT id FROM drivers WHERE user_id = ?', (user_id,)
+        ).fetchall()
+    ]
+    for driver_id in driver_ids:
+        conn.execute('DELETE FROM emergency_contacts WHERE driver_id = ?', (driver_id,))
+    conn.execute('DELETE FROM alert_events WHERE user_id = ?', (user_id,))
+    conn.execute('DELETE FROM password_reset_tokens WHERE user_id = ?', (user_id,))
+    conn.execute('DELETE FROM drivers WHERE user_id = ?', (user_id,))
+    conn.execute('DELETE FROM users WHERE id = ?', (user_id,))
+    conn.commit()
+
+    if user['profile_picture']:
+        _delete_profile_picture_file(user['profile_picture'])
+    if user['firebase_uid']:
+        delete_firebase_auth_user(user['firebase_uid'])
+    return True
 
 
 def _format_alert_recipients(conn, driver_id, alert_type, payload_value):
@@ -909,6 +942,45 @@ def profile_password():
     conn.close()
     flash('Password changed.', 'success')
     return redirect(url_for('profile'))
+
+
+@app.route('/profile/delete', methods=['POST'])
+@login_required
+def profile_delete():
+    conn = get_db()
+    row = conn.execute(
+        'SELECT id, email, password_hash, firebase_uid FROM users WHERE id = ?',
+        (current_user.id,),
+    ).fetchone()
+    if not row:
+        conn.close()
+        flash('Account not found.', 'error')
+        return redirect(url_for('profile'))
+
+    has_local_password = bool(row['password_hash'])
+    if has_local_password:
+        password = request.form.get('password', '')
+        if not check_password_hash(row['password_hash'], password):
+            conn.close()
+            flash('Password is incorrect. Account was not deleted.', 'error')
+            return redirect(url_for('profile'))
+    else:
+        confirm_email = request.form.get('confirm_email', '').strip().lower()
+        if confirm_email != row['email'].lower():
+            conn.close()
+            flash('Email confirmation did not match. Account was not deleted.', 'error')
+            return redirect(url_for('profile'))
+
+    if request.form.get('confirm_delete') != 'on':
+        conn.close()
+        flash('Please confirm that you want to permanently delete your account.', 'error')
+        return redirect(url_for('profile'))
+
+    _delete_user_account(conn, current_user.id)
+    conn.close()
+    logout_user()
+    flash('Your account has been permanently deleted.', 'success')
+    return redirect(url_for('login'))
 
 
 # ============ Alerts log ============

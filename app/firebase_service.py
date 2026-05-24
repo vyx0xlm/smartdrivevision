@@ -99,3 +99,16 @@ def send_password_reset_email(email: str) -> None:
     from firebase_admin import auth
     _ensure_firebase_app()
     auth.generate_password_reset_link(email)
+
+
+def delete_firebase_auth_user(fb_uid: str) -> bool:
+    """Remove Firebase Auth user (Google/email). Returns False if skipped or failed."""
+    if not fb_uid or not firebase_enabled():
+        return False
+    try:
+        from firebase_admin import auth
+        _ensure_firebase_app()
+        auth.delete_user(fb_uid)
+        return True
+    except Exception:
+        return False

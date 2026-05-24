@@ -117,6 +117,30 @@
     {% endif %}
 </div>
 
+<div class="card" style="border-color: rgba(244, 33, 46, 0.35);">
+    <h2 style="color: var(--danger);">Delete account</h2>
+    <p class="profile-meta" style="margin-bottom: 1rem;">
+        Permanently remove your account, driver profile, emergency contacts, and alert history.
+        This cannot be undone.
+    </p>
+    <form method="post" action="{{ url_for('profile_delete') }}" id="delete-account-form"
+          onsubmit="return confirm('Delete your SmartDrive account permanently? This cannot be undone.');">
+        {% if has_local_password %}
+        <label for="delete_password">Enter your password to confirm</label>
+        <input type="password" id="delete_password" name="password" required autocomplete="current-password">
+        {% else %}
+        <label for="confirm_email">Type your email to confirm</label>
+        <input type="email" id="confirm_email" name="confirm_email" required autocomplete="email"
+               placeholder="{{ user.email }}">
+        {% endif %}
+        <div class="checkbox-row">
+            <input type="checkbox" id="confirm_delete" name="confirm_delete" required>
+            <label for="confirm_delete" style="margin: 0;">I understand this will permanently delete my account</label>
+        </div>
+        <button type="submit" class="btn btn-danger" style="margin-top: 1rem;">Delete my account</button>
+    </form>
+</div>
+
 <div class="photo-crop-modal" id="photo-crop-modal" aria-hidden="true">
     <div class="photo-crop-dialog card">
         <h2>Adjust profile photo</h2>
