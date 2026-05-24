@@ -295,8 +295,32 @@ Use **`--workers 1`** — SQLite breaks with multiple Gunicorn workers.
 | `FLASK_DEBUG` | `0` |
 | `FIREBASE_WEB_CONFIG` | Paste entire contents of `firebase_web_config.json` as one line |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Paste entire contents of `serviceAccountKey.json` as one line |
+| `APP_URL` | `https://drive-vision.onrender.com` (your public URL — used in reset emails) |
 
 These JSON files are **not on GitHub** — you must add them as env vars on Render for Google sign-in to appear.
+
+### Password reset email (Gmail SMTP)
+
+Forgot-password sends a reset link by email. On Render, add:
+
+| Key | Example value |
+|-----|----------------|
+| `MAIL_SERVER` | `smtp.gmail.com` |
+| `MAIL_PORT` | `587` |
+| `MAIL_USE_TLS` | `1` |
+| `MAIL_USERNAME` | Your Gmail address |
+| `MAIL_PASSWORD` | Gmail **App Password** (not your normal password) |
+| `MAIL_DEFAULT_SENDER` | `SmartDrive <your@gmail.com>` |
+
+**Create a Gmail App Password:**
+
+1. Google Account → **Security** → turn on **2-Step Verification** (required).
+2. Security → **App passwords** → create one for “Mail” / “Other (SmartDrive)”.
+3. Copy the 16-character password into Render as `MAIL_PASSWORD`.
+
+Redeploy after saving env vars. Test at `/forgot-password` on your live site.
+
+> Google-only accounts (signed up with “Continue with Google”) have no local password — they cannot use email reset; use Google sign-in instead.
 
 ### Firebase authorized domain
 

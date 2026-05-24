@@ -37,7 +37,7 @@
         <p class="sub">Access your dashboard and manage drivers &amp; alerts.</p>
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, message in messages %}
-        {% if category == 'error' %}<div class="flash">{{ message }}</div>{% endif %}
+        <div class="flash {{ category }}">{{ message }}</div>
         {% endfor %}
         {% endwith %}
         <div id="auth-message" class="flash" style="display:none;"></div>

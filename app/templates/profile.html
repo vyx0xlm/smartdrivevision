@@ -160,8 +160,7 @@
   let modalOpenedFromFile = false;
 
   function updateAdjustButton() {
-    const hasImage = preview && preview.tagName === 'IMG' && preview.src;
-    if (adjustBtn) adjustBtn.style.display = hasImage ? 'inline-flex' : 'none';
+    if (adjustBtn) adjustBtn.style.display = hasPendingPhoto ? 'inline-flex' : 'none';
   }
 
   function setPreviewImage(src) {
@@ -189,6 +188,7 @@
     hasPendingPhoto = true;
     if (cancelBtn) cancelBtn.style.display = 'inline-flex';
     if (pendingNote) pendingNote.style.display = 'block';
+    updateAdjustButton();
   }
 
   function clearPending() {
@@ -196,6 +196,7 @@
     if (fileInput) fileInput.value = '';
     if (cancelBtn) cancelBtn.style.display = 'none';
     if (pendingNote) pendingNote.style.display = 'none';
+    updateAdjustButton();
   }
 
   function resetPreview() {

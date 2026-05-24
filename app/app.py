@@ -6,6 +6,7 @@ Auth, profile, dedicated emergency contacts, dashboard, alert log, IoT API.
 import os
 import secrets
 import sqlite3
+import hashlib
 from datetime import datetime, timedelta
 from uuid import uuid4
 
@@ -43,6 +44,7 @@ from data_store import (
     use_firestore,
 )
 from firebase_service import firebase_enabled, get_firebase_web_config, verify_id_token
+from email_service import mail_configured, send_password_reset_email
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
@@ -64,6 +66,7 @@ login_manager.login_message = 'Please sign in to access this page.'
 DATABASE = os.path.join(os.path.dirname(__file__), 'smartdrive.db')
 PROFILE_UPLOAD_DIR = os.path.join(os.path.dirname(__file__), 'static', 'uploads', 'profiles')
 ALLOWED_PROFILE_EXT = {'png', 'jpg', 'jpeg', 'webp', 'gif'}
+PASSWORD_RESET_HOURS = 1
 
 
 @app.context_processor
@@ -130,6 +133,15 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users (id),
             FOREIGN KEY (driver_id) REFERENCES drivers (id)
         );
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token_hash TEXT NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            used INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        );
     ''')
 
     cols = _table_columns(conn, 'drivers')
@@ -177,6 +189,52 @@ class User(UserMixin):
         self.full_name = full_name
         self.phone = phone
         self.onboarding_done = bool(onboarding_done)
+
+
+def _hash_reset_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _app_base_url():
+    configured = (os.environ.get('APP_URL') or '').strip().rstrip('/')
+    if configured:
+        return configured
+    return request.url_root.rstrip('/')
+
+
+def _create_password_reset_token(conn, user_id: int) -> str:
+    token = secrets.token_urlsafe(32)
+    expires = (datetime.utcnow() + timedelta(hours=PASSWORD_RESET_HOURS)).isoformat()
+    conn.execute(
+        'UPDATE password_reset_tokens SET used = 1 WHERE user_id = ? AND used = 0',
+        (user_id,),
+    )
+    conn.execute(
+        'INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)',
+        (user_id, _hash_reset_token(token), expires),
+    )
+    conn.commit()
+    return token
+
+
+def _valid_reset_token(conn, token: str):
+    if not token:
+        return None
+    row = conn.execute(
+        '''SELECT t.*, u.email FROM password_reset_tokens t
+           JOIN users u ON t.user_id = u.id
+           WHERE t.token_hash = ? AND t.used = 0''',
+        (_hash_reset_token(token),),
+    ).fetchone()
+    if not row:
+        return None
+    try:
+        expires = datetime.fromisoformat(row['expires_at'])
+    except ValueError:
+        return None
+    if datetime.utcnow() > expires:
+        return None
+    return row
 
 
 def row_user(row):
@@ -477,7 +535,82 @@ def auth_firebase():
 def forgot_password():
     if current_user.is_authenticated:
         return redirect(url_for('profile'))
-    return render_template('forgot_password.html')
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        if not email:
+            flash('Please enter your email address.', 'error')
+            return render_template('forgot_password.html', email=email)
+
+        if not mail_configured():
+            flash(
+                'Password reset email is not configured on this server. '
+                'Ask the administrator to set MAIL_SERVER, MAIL_USERNAME, and MAIL_PASSWORD.',
+                'error',
+            )
+            return render_template('forgot_password.html', email=email)
+
+        conn = get_db()
+        row = conn.execute(
+            'SELECT id, email, password_hash FROM users WHERE email = ?', (email,)
+        ).fetchone()
+
+        if row and row['password_hash']:
+            try:
+                token = _create_password_reset_token(conn, row['id'])
+                reset_url = f"{_app_base_url()}{url_for('reset_password', token=token)}"
+                send_password_reset_email(row['email'], reset_url)
+            except Exception as exc:
+                conn.close()
+                app.logger.exception('Password reset email failed')
+                flash(f'Could not send reset email: {exc}', 'error')
+                return render_template('forgot_password.html', email=email)
+        conn.close()
+
+        flash(
+            'If an account exists for that email, password reset instructions have been sent.',
+            'success',
+        )
+        return render_template('forgot_password.html', email='')
+
+    return render_template('forgot_password.html', email='')
+
+
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+
+    conn = get_db()
+    token_row = _valid_reset_token(conn, token)
+    if not token_row:
+        conn.close()
+        flash('This password reset link is invalid or has expired.', 'error')
+        return redirect(url_for('forgot_password'))
+
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        confirm = request.form.get('password_confirm', '')
+        if len(password) < 8:
+            flash('Password must be at least 8 characters.', 'error')
+            return render_template('reset_password.html')
+        if password != confirm:
+            flash('Passwords do not match.', 'error')
+            return render_template('reset_password.html')
+
+        conn.execute(
+            'UPDATE users SET password_hash = ? WHERE id = ?',
+            (generate_password_hash(password), token_row['user_id']),
+        )
+        conn.execute(
+            'UPDATE password_reset_tokens SET used = 1 WHERE id = ?', (token_row['id'],)
+        )
+        conn.commit()
+        conn.close()
+        flash('Your password has been updated. You can sign in now.', 'success')
+        return redirect(url_for('login'))
+
+    conn.close()
+    return render_template('reset_password.html')
 
 
 @app.route('/onboarding/complete', methods=['POST'])
