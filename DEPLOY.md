@@ -275,7 +275,7 @@ GET  https://YOUR_USERNAME.pythonanywhere.com/api/health
 
 ---
 
-## Render (always-on cloud — e.g. drive-vision.onrender.com)
+## Render (always-on cloud — e.g. smartdrive-vision.onrender.com)
 
 ### Render dashboard settings
 
@@ -287,15 +287,53 @@ GET  https://YOUR_USERNAME.pythonanywhere.com/api/health
 
 Use **`--workers 1`** — SQLite breaks with multiple Gunicorn workers.
 
+### Persistent database — Render PostgreSQL (free, recommended)
+
+On Render’s **free** web tier, local SQLite files are **wiped on redeploy**. Use **Render Postgres** (free for 30 days) so the dashboard and Pi API share one database that survives redeploys.
+
+**Step 1 — Create Postgres (Render Dashboard)**
+
+1. **New +** → **PostgreSQL**
+2. Name: `smartdrive-db` (or any name)
+3. Plan: **Free**
+4. Create database
+
+**Step 2 — Link to your web service**
+
+1. Open your **web service** → **Environment**
+2. Add variable **`DATABASE_URL`**
+3. Click **Add from database** → select your Postgres → **Connection string** (internal URL is fine)
+4. Save → redeploy
+
+Or use the repo’s `render.yaml` Blueprint (creates web + Postgres and wires `DATABASE_URL` automatically).
+
+**Step 3 — Verify**
+
+Open:
+```
+https://smartdrive-vision.onrender.com/api/health
+```
+Should show `"database": "postgresql"`.
+
+Sign up on the live site, add emergency contacts, then test:
+```
+https://smartdrive-vision.onrender.com/api/driver/DR001/emergency-contacts
+```
+
+> **Free Postgres expires after 30 days.** For a longer FYP demo, export data before expiry or upgrade to a paid Postgres plan (~$6/month). You do **not** upload `smartdrive.db` from your laptop.
+
+**Alternative (paid):** SQLite on a **persistent disk** requires a paid web service (~$7/month) + disk storage. Postgres free tier avoids that cost for ~30 days.
+
 ### Environment variables (Render → Environment)
 
 | Key | Value |
 |-----|--------|
 | `SECRET_KEY` | Long random string (required — keeps sessions working) |
 | `FLASK_DEBUG` | `0` |
+| `DATABASE_URL` | From Render Postgres (connection string) |
 | `FIREBASE_WEB_CONFIG` | Paste entire contents of `firebase_web_config.json` as one line |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Paste entire contents of `serviceAccountKey.json` as one line |
-| `APP_URL` | `https://drive-vision.onrender.com` (your public URL — used in reset emails) |
+| `APP_URL` | `https://smartdrive-vision.onrender.com` (your public URL — used in reset emails) |
 
 These JSON files are **not on GitHub** — you must add them as env vars on Render for Google sign-in to appear.
 
@@ -326,7 +364,7 @@ Redeploy after saving env vars. Test at `/forgot-password` on your live site.
 
 Firebase Console → Authentication → Settings → **Authorized domains** → add:
 
-`drive-vision.onrender.com` (your Render subdomain)
+`smartdrive-vision.onrender.com` (your Render subdomain)
 
 ### Fix “Internal Server Error” after sign-in
 

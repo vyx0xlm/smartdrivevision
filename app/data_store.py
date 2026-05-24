@@ -1,6 +1,6 @@
 """
-Data access layer — SQLite (local) or Firestore (Firebase live).
-Set USE_FIREBASE=1 and GOOGLE_APPLICATION_CREDENTIALS for cloud mode.
+Data access layer — SQLite/PostgreSQL (via database.py) or Firestore (optional).
+Set DATABASE_URL for Render Postgres. Set USE_FIREBASE=1 for Firestore (legacy).
 """
 
 import os
@@ -11,9 +11,7 @@ from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from firebase_service import firebase_enabled, init_firebase
-
-DATABASE = os.path.join(os.path.dirname(__file__), 'smartdrive.db')
-LOCAL_TIME_OFFSET = '+8 hours'
+from database import get_db, init_schema, use_postgres
 
 
 def normalize_phone(phone: str) -> str:
@@ -21,77 +19,18 @@ def normalize_phone(phone: str) -> str:
     return re.sub(r'\D', '', (phone or '').strip())
 
 
-# ── SQLite backend ────────────────────────────────────────────────────────────
+# ── SQLite / PostgreSQL backend ───────────────────────────────────────────────
 
-def _sqlite_conn():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
+def _sql_conn():
+    return get_db()
 
 
 def sqlite_init_db():
-    conn = _sqlite_conn()
-    conn.executescript('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL,
-            full_name TEXT NOT NULL,
-            phone TEXT,
-            onboarding_done INTEGER DEFAULT 0,
-            firebase_uid TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS drivers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            driver_code TEXT UNIQUE,
-            user_id INTEGER,
-            name TEXT NOT NULL,
-            phone TEXT NOT NULL,
-            email TEXT,
-            vehicle_info TEXT,
-            device_id TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        );
-        CREATE TABLE IF NOT EXISTS emergency_contacts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            driver_id INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            phone TEXT NOT NULL,
-            relationship TEXT,
-            is_primary INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (driver_id) REFERENCES drivers (id)
-        );
-        CREATE TABLE IF NOT EXISTS alert_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            driver_id INTEGER,
-            alert_type TEXT DEFAULT 'SMS',
-            alert_recipients TEXT,
-            message TEXT NOT NULL,
-            source TEXT DEFAULT 'iot',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id),
-            FOREIGN KEY (driver_id) REFERENCES drivers (id)
-        );
-    ''')
-    cols = {r[1] for r in conn.execute('PRAGMA table_info(users)').fetchall()}
-    if 'onboarding_done' not in cols:
-        conn.execute('ALTER TABLE users ADD COLUMN onboarding_done INTEGER DEFAULT 0')
-    if 'firebase_uid' not in cols:
-        conn.execute('ALTER TABLE users ADD COLUMN firebase_uid TEXT')
-    conn.execute(
-        'CREATE UNIQUE INDEX IF NOT EXISTS idx_emergency_primary_per_driver '
-        'ON emergency_contacts(driver_id) WHERE is_primary = 1'
-    )
-    conn.commit()
-    conn.close()
+    init_schema()
 
 
 def sqlite_user_by_id(uid):
-    conn = _sqlite_conn()
+    conn = _sql_conn()
     row = conn.execute(
         'SELECT id, email, full_name, phone, onboarding_done, firebase_uid FROM users WHERE id = ?',
         (int(uid),),
@@ -101,21 +40,21 @@ def sqlite_user_by_id(uid):
 
 
 def sqlite_user_by_email(email):
-    conn = _sqlite_conn()
+    conn = _sql_conn()
     row = conn.execute('SELECT * FROM users WHERE email = ?', (email.lower(),)).fetchone()
     conn.close()
     return dict(row) if row else None
 
 
 def sqlite_user_by_firebase_uid(fb_uid):
-    conn = _sqlite_conn()
+    conn = _sql_conn()
     row = conn.execute('SELECT * FROM users WHERE firebase_uid = ?', (fb_uid,)).fetchone()
     conn.close()
     return dict(row) if row else None
 
 
 def sqlite_create_user(email, password, full_name, phone=None, firebase_uid=None):
-    conn = _sqlite_conn()
+    conn = _sql_conn()
     try:
         conn.execute(
             'INSERT INTO users (email, password_hash, full_name, phone, firebase_uid) VALUES (?, ?, ?, ?, ?)',
@@ -125,13 +64,24 @@ def sqlite_create_user(email, password, full_name, phone=None, firebase_uid=None
         row = conn.execute('SELECT * FROM users WHERE email = ?', (email.lower(),)).fetchone()
         conn.close()
         return dict(row)
-    except sqlite3.IntegrityError:
+    except Exception as exc:
+        try:
+            conn._conn.rollback()
+        except Exception:
+            pass
         conn.close()
-        return None
+        if isinstance(exc, sqlite3.IntegrityError):
+            return None
+        if use_postgres():
+            import psycopg2
+
+            if isinstance(exc, psycopg2.IntegrityError):
+                return None
+        raise
 
 
 def sqlite_upsert_firebase_user(fb_uid, email, full_name, phone=None):
-    conn = _sqlite_conn()
+    conn = _sql_conn()
     row = conn.execute('SELECT * FROM users WHERE firebase_uid = ? OR email = ?', (fb_uid, email.lower())).fetchone()
     if row:
         conn.execute(
@@ -152,7 +102,7 @@ def sqlite_upsert_firebase_user(fb_uid, email, full_name, phone=None):
 
 
 def sqlite_set_onboarding_done(uid):
-    conn = _sqlite_conn()
+    conn = _sql_conn()
     conn.execute('UPDATE users SET onboarding_done = 1 WHERE id = ?', (int(uid),))
     conn.commit()
     conn.close()
@@ -162,7 +112,7 @@ def sqlite_emergency_phone_taken(driver_id, phone, exclude_contact_id=None):
     norm = normalize_phone(phone)
     if not norm:
         return False
-    conn = _sqlite_conn()
+    conn = _sql_conn()
     rows = conn.execute(
         'SELECT id, phone FROM emergency_contacts WHERE driver_id = ?',
         (int(driver_id),),
@@ -262,9 +212,10 @@ def use_firestore():
 # ── Unified API (pick backend) ───────────────────────────────────────────────
 
 def init_db():
-    """Always ensure SQLite exists (used for auth + local data). Optionally init Firestore."""
-    sqlite_init_db()
-    if use_firestore():
+    """Ensure SQL schema (SQLite or Postgres) and optionally init Firestore."""
+    if not use_firestore():
+        init_schema()
+    elif use_firestore():
         try:
             init_firebase()
         except Exception as exc:

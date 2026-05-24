@@ -5,7 +5,6 @@ Auth, profile, dedicated emergency contacts, dashboard, alert log, IoT API.
 
 import os
 import secrets
-import sqlite3
 import hashlib
 from datetime import datetime, timedelta
 from uuid import uuid4
@@ -24,6 +23,7 @@ from flask import (
     url_for,
     flash,
     session,
+    send_from_directory,
 )
 from flask_cors import CORS
 from flask_login import (
@@ -36,6 +36,14 @@ from flask_login import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 
+from db_config import ensure_data_dirs, get_profile_upload_dir
+from database import (
+    created_at_local_select,
+    get_db,
+    is_unique_violation,
+    parse_expires_at,
+    use_postgres,
+)
 from data_store import (
     init_db as datastore_init,
     set_onboarding_done,
@@ -63,8 +71,7 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Please sign in to access this page.'
 
-DATABASE = os.path.join(os.path.dirname(__file__), 'smartdrive.db')
-PROFILE_UPLOAD_DIR = os.path.join(os.path.dirname(__file__), 'static', 'uploads', 'profiles')
+PROFILE_UPLOAD_DIR = get_profile_upload_dir()
 ALLOWED_PROFILE_EXT = {'png', 'jpg', 'jpeg', 'webp', 'gif'}
 PASSWORD_RESET_HOURS = 1
 
@@ -74,111 +81,17 @@ def inject_globals():
     return {'firebase_config': get_firebase_web_config()}
 
 
-def get_db():
-    conn = sqlite3.connect(DATABASE, timeout=30, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def _table_columns(conn, name):
-    return {r[1] for r in conn.execute(f'PRAGMA table_info({name})').fetchall()}
+@app.route('/static/uploads/profiles/<path:filename>')
+def serve_profile_upload(filename):
+    """Serve profile photos from persistent disk when DATA_DIR is set on Render."""
+    return send_from_directory(PROFILE_UPLOAD_DIR, filename)
 
 
 def init_db():
-    """Create and migrate database (SQLite or Firestore)."""
+    """Create and migrate database (SQLite, PostgreSQL, or Firestore)."""
     datastore_init()
     if use_firestore():
         return
-    conn = get_db()
-    conn.executescript('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL,
-            full_name TEXT NOT NULL,
-            phone TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS drivers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            driver_code TEXT UNIQUE,
-            user_id INTEGER,
-            name TEXT NOT NULL,
-            phone TEXT NOT NULL,
-            email TEXT,
-            vehicle_info TEXT,
-            device_id TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        );
-        CREATE TABLE IF NOT EXISTS emergency_contacts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            driver_id INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            phone TEXT NOT NULL,
-            relationship TEXT,
-            is_primary INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (driver_id) REFERENCES drivers (id)
-        );
-        CREATE TABLE IF NOT EXISTS alert_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            driver_id INTEGER,
-            alert_type TEXT DEFAULT 'SMS',
-            alert_recipients TEXT,
-            message TEXT NOT NULL,
-            source TEXT DEFAULT 'iot',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id),
-            FOREIGN KEY (driver_id) REFERENCES drivers (id)
-        );
-        CREATE TABLE IF NOT EXISTS password_reset_tokens (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            token_hash TEXT NOT NULL,
-            expires_at TIMESTAMP NOT NULL,
-            used INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        );
-    ''')
-
-    cols = _table_columns(conn, 'drivers')
-    if 'user_id' not in cols:
-        conn.execute('ALTER TABLE drivers ADD COLUMN user_id INTEGER REFERENCES users (id)')
-    if 'driver_code' not in cols:
-        conn.execute('ALTER TABLE drivers ADD COLUMN driver_code TEXT')
-        # Backfill legacy drivers with DRxxx codes.
-        rows = conn.execute('SELECT id FROM drivers WHERE driver_code IS NULL OR TRIM(driver_code) = "" ORDER BY id').fetchall()
-        for idx, row in enumerate(rows, start=1):
-            conn.execute(
-                'UPDATE drivers SET driver_code = ? WHERE id = ?',
-                (f'DR{idx:03d}', row['id']),
-            )
-    conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_drivers_driver_code ON drivers(driver_code)')
-    user_cols = _table_columns(conn, 'users')
-    if 'onboarding_done' not in user_cols:
-        conn.execute('ALTER TABLE users ADD COLUMN onboarding_done INTEGER DEFAULT 0')
-    if 'firebase_uid' not in user_cols:
-        conn.execute('ALTER TABLE users ADD COLUMN firebase_uid TEXT')
-    if 'profile_picture' not in user_cols:
-        conn.execute('ALTER TABLE users ADD COLUMN profile_picture TEXT')
-    alert_cols = _table_columns(conn, 'alert_events')
-    if 'alert_type' not in alert_cols:
-        conn.execute("ALTER TABLE alert_events ADD COLUMN alert_type TEXT DEFAULT 'SMS'")
-        conn.execute("UPDATE alert_events SET alert_type = 'SMS' WHERE alert_type IS NULL OR TRIM(alert_type) = ''")
-    if 'alert_recipients' not in alert_cols:
-        conn.execute("ALTER TABLE alert_events ADD COLUMN alert_recipients TEXT")
-        conn.execute("UPDATE alert_events SET alert_recipients = '' WHERE alert_recipients IS NULL")
-    # Ensure each driver can have at most one primary emergency contact.
-    conn.execute(
-        'CREATE UNIQUE INDEX IF NOT EXISTS idx_emergency_primary_per_driver '
-        'ON emergency_contacts(driver_id) WHERE is_primary = 1'
-    )
-
-    conn.commit()
-    conn.close()
     os.makedirs(PROFILE_UPLOAD_DIR, exist_ok=True)
 
 
@@ -229,8 +142,10 @@ def _valid_reset_token(conn, token: str):
     if not row:
         return None
     try:
-        expires = datetime.fromisoformat(row['expires_at'])
-    except ValueError:
+        expires = parse_expires_at(row['expires_at'])
+    except (ValueError, TypeError):
+        return None
+    if expires is None:
         return None
     if datetime.utcnow() > expires:
         return None
@@ -331,7 +246,10 @@ def sync_driver_from_profile(conn, user_id, full_name, phone, email, vehicle_inf
 def _profile_picture_abs_path(relative_path):
     if not relative_path:
         return None
-    return os.path.join(os.path.dirname(__file__), 'static', relative_path.replace('/', os.sep))
+    rel = relative_path.replace('\\', '/').lstrip('/')
+    if rel.startswith('uploads/profiles/'):
+        return os.path.join(PROFILE_UPLOAD_DIR, os.path.basename(rel))
+    return os.path.join(os.path.dirname(__file__), 'static', rel.replace('/', os.sep))
 
 
 def _delete_profile_picture_file(relative_path):
@@ -473,10 +391,16 @@ def signup():
             login_user(row_user(row))
             flash('Account created. Welcome to SmartDrive.', 'success')
             return redirect(url_for('dashboard'))
-        except sqlite3.IntegrityError:
+        except Exception as exc:
+            try:
+                conn._conn.rollback()
+            except Exception:
+                pass
             conn.close()
-            flash('An account with this email already exists.', 'error')
-            return render_template('signup.html', firebase_config=get_firebase_web_config())
+            if is_unique_violation(exc):
+                flash('An account with this email already exists.', 'error')
+                return render_template('signup.html', firebase_config=get_firebase_web_config())
+            raise
 
     return render_template('signup.html', firebase_config=get_firebase_web_config())
 
@@ -654,11 +578,12 @@ def dashboard():
         'SELECT COUNT(*) AS c FROM alert_events WHERE user_id = ? AND created_at >= ?',
         (uid, since),
     ).fetchone()['c']
+    local_sql, local_params = created_at_local_select('a')
     recent = conn.execute(
-        '''SELECT a.*, datetime(a.created_at, ?) AS created_at_local, dr.name AS driver_name FROM alert_events a
+        f'''SELECT a.*, {local_sql}, dr.name AS driver_name FROM alert_events a
            LEFT JOIN drivers dr ON a.driver_id = dr.id
            WHERE a.user_id = ? ORDER BY a.created_at DESC LIMIT 5''',
-        (LOCAL_TIME_OFFSET, uid),
+        (*local_params, uid),
     ).fetchall()
     onboarding = conn.execute(
         'SELECT onboarding_done FROM users WHERE id = ?', (uid,)
@@ -921,13 +846,19 @@ def profile():
             login_user(row_user(row))
             flash('Profile updated.', 'success')
             return redirect(url_for('profile'))
-        except sqlite3.IntegrityError:
+        except Exception as exc:
+            try:
+                conn._conn.rollback()
+            except Exception:
+                pass
             conn.close()
-            flash('That email is already in use.', 'error')
-            conn = get_db()
-            ctx = _profile_context(conn, current_user.id)
-            conn.close()
-            return render_template('profile.html', **ctx)
+            if is_unique_violation(exc):
+                flash('That email is already in use.', 'error')
+                conn = get_db()
+                ctx = _profile_context(conn, current_user.id)
+                conn.close()
+                return render_template('profile.html', **ctx)
+            raise
 
     ctx = _profile_context(conn, current_user.id)
     conn.close()
@@ -986,11 +917,12 @@ def profile_password():
 @login_required
 def alerts_log():
     conn = get_db()
+    local_sql, local_params = created_at_local_select('a')
     rows = conn.execute(
-        '''SELECT a.*, datetime(a.created_at, ?) AS created_at_local, dr.name AS driver_name FROM alert_events a
+        f'''SELECT a.*, {local_sql}, dr.name AS driver_name FROM alert_events a
            LEFT JOIN drivers dr ON a.driver_id = dr.id
            WHERE a.user_id = ? ORDER BY a.created_at DESC LIMIT 200''',
-        (LOCAL_TIME_OFFSET, current_user.id),
+        (*local_params, current_user.id),
     ).fetchall()
     conn.close()
     return render_template('alerts.html', alerts=[dict(r) for r in rows])
@@ -1091,10 +1023,15 @@ def api_log_alert():
 
 @app.route('/api/health')
 def api_health():
-    return jsonify({'status': 'ok', 'service': 'smartdrive'})
+    return jsonify({
+        'status': 'ok',
+        'service': 'smartdrive',
+        'database': 'postgresql' if use_postgres() else 'sqlite',
+    })
 
 
 # Run when loaded by gunicorn on Render/Docker (not only via python app.py)
+ensure_data_dirs()
 init_db()
 
 
