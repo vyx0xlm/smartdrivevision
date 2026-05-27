@@ -84,9 +84,10 @@ def sqlite_upsert_firebase_user(fb_uid, email, full_name, phone=None):
     conn = _sql_conn()
     row = conn.execute('SELECT * FROM users WHERE firebase_uid = ? OR email = ?', (fb_uid, email.lower())).fetchone()
     if row:
+        # Keep profile name the user saved; Google display name only applies on first sign-up.
         conn.execute(
-            'UPDATE users SET firebase_uid=?, full_name=?, phone=COALESCE(?, phone) WHERE id=?',
-            (fb_uid, full_name, phone, row['id']),
+            'UPDATE users SET firebase_uid=?, phone=COALESCE(?, phone) WHERE id=?',
+            (fb_uid, phone, row['id']),
         )
         conn.commit()
         uid = row['id']
@@ -152,12 +153,12 @@ def fs_upsert_firebase_user(fb_uid, email, full_name, phone=None):
     snap = ref.get()
     data = {
         'email': email.lower(),
-        'full_name': full_name,
         'phone': phone,
         'firebase_uid': fb_uid,
         'updated_at': datetime.utcnow().isoformat(),
     }
     if not snap.exists:
+        data['full_name'] = full_name
         data['onboarding_done'] = False
         data['created_at'] = datetime.utcnow().isoformat()
         data['driver_seq'] = 0

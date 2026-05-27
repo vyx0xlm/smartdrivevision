@@ -19,7 +19,7 @@
         <tbody>
             {% for a in alerts %}
             <tr>
-                <td style="white-space: nowrap; font-size: 0.85rem;">{{ a.created_at_local or a.created_at }}</td>
+                <td style="white-space: nowrap; font-size: 0.85rem;">{{ (a.created_at_local or a.created_at) | format_dt }}</td>
                 <td>{{ a.alert_type or 'SMS' }}</td>
                 <td>
                     {% if a.alert_recipients %}

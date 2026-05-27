@@ -81,6 +81,23 @@ ALLOWED_PROFILE_EXT = {'png', 'jpg', 'jpeg', 'webp', 'gif'}
 PASSWORD_RESET_HOURS = 1
 
 
+def format_display_datetime(value):
+    """Show timestamps without fractional seconds, e.g. 2026-05-24 10:56:17."""
+    if value is None:
+        return ''
+    if isinstance(value, datetime):
+        return value.replace(microsecond=0).strftime('%Y-%m-%d %H:%M:%S')
+    text = str(value).strip()
+    if not text:
+        return ''
+    if '.' in text:
+        text = text.split('.', 1)[0]
+    return text
+
+
+app.jinja_env.filters['format_dt'] = format_display_datetime
+
+
 @app.context_processor
 def inject_globals():
     return {'firebase_config': get_firebase_web_config()}
@@ -120,9 +137,18 @@ def _app_base_url():
     return request.url_root.rstrip('/')
 
 
-def _create_password_reset_token(conn, user_id: int) -> str:
-    token = secrets.token_urlsafe(32)
+def _save_password_reset_token(conn, user_id: int, token: str) -> None:
+    """Store a new reset token after email was sent; retire previous unused tokens."""
     expires = (datetime.utcnow() + timedelta(hours=PASSWORD_RESET_HOURS)).isoformat()
+    now = datetime.utcnow().isoformat()
+    conn.execute(
+        'DELETE FROM password_reset_tokens WHERE user_id = ? AND used = 1',
+        (user_id,),
+    )
+    conn.execute(
+        'DELETE FROM password_reset_tokens WHERE user_id = ? AND used = 0 AND expires_at < ?',
+        (user_id, now),
+    )
     conn.execute(
         'UPDATE password_reset_tokens SET used = 1 WHERE user_id = ? AND used = 0',
         (user_id,),
@@ -132,7 +158,6 @@ def _create_password_reset_token(conn, user_id: int) -> str:
         (user_id, _hash_reset_token(token), expires),
     )
     conn.commit()
-    return token
 
 
 def _valid_reset_token(conn, token: str):
@@ -511,11 +536,12 @@ def forgot_password():
             'SELECT id, email, password_hash FROM users WHERE email = ?', (email,)
         ).fetchone()
 
-        if row and row['password_hash']:
+        if row and (row['password_hash'] or '').strip():
             try:
-                token = _create_password_reset_token(conn, row['id'])
+                token = secrets.token_urlsafe(32)
                 reset_url = f"{_app_base_url()}{url_for('reset_password', token=token)}"
                 send_password_reset_email(row['email'], reset_url)
+                _save_password_reset_token(conn, row['id'], token)
             except Exception as exc:
                 conn.close()
                 app.logger.exception('Password reset email failed')
