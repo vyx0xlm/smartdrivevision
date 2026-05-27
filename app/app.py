@@ -522,8 +522,9 @@ def forgot_password():
 
         if not mail_configured():
             flash(
-                'Password reset email is not configured on this server. '
-                'Ask the administrator to set MAIL_SERVER, MAIL_USERNAME, and MAIL_PASSWORD.',
+                'Password reset email is not configured. '
+                'Set RESEND_API_KEY and RESEND_FROM (recommended on Render), '
+                'or MAIL_SERVER, MAIL_USERNAME, and MAIL_PASSWORD for local SMTP.',
                 'error',
             )
             return render_template('forgot_password.html', email=email)

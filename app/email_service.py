@@ -2,7 +2,6 @@
 
 import os
 import smtplib
-from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -42,8 +41,7 @@ def send_email(to_email: str, subject: str, text_body: str, html_body: str | Non
 
 
 def send_password_reset_email(to_email: str, reset_url: str) -> None:
-    sent_at = datetime.now().strftime('%Y-%m-%d %H:%M')
-    subject = f'SmartDrive password reset ({sent_at})'
+    subject = 'SmartDrive — reset your password'
     text_body = (
         'You requested a password reset for your SmartDrive account.\n\n'
         f'Open this link to choose a new password (valid for 1 hour):\n{reset_url}\n\n'
