@@ -40,16 +40,29 @@ class DbCursor:
         self._cursor = cursor
         self._backend = backend
 
+    def _close(self):
+        if self._backend == 'postgres' and self._cursor is not None:
+            try:
+                self._cursor.close()
+            except Exception:
+                pass
+            self._cursor = None
+
     def fetchone(self):
-        row = self._cursor.fetchone()
-        if row is None:
+        if self._cursor is None:
             return None
-        if self._backend == 'postgres':
-            return row
-        return row
+        try:
+            return self._cursor.fetchone()
+        finally:
+            self._close()
 
     def fetchall(self):
-        return self._cursor.fetchall()
+        if self._cursor is None:
+            return []
+        try:
+            return self._cursor.fetchall()
+        finally:
+            self._close()
 
 
 class DbConnection:
@@ -66,6 +79,9 @@ class DbConnection:
             sql = _pg_adapt_sql(sql)
             cur = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             cur.execute(sql, params)
+            if cur.description is None:
+                cur.close()
+                return DbCursor(None, self._backend)
             return DbCursor(cur, self._backend)
         return self._conn.execute(sql, params)
 

@@ -138,24 +138,21 @@ def _app_base_url():
 
 
 def _save_password_reset_token(conn, user_id: int, token: str) -> None:
-    """Store a new reset token after email was sent; retire previous unused tokens."""
-    expires = (datetime.utcnow() + timedelta(hours=PASSWORD_RESET_HOURS)).isoformat()
-    now = datetime.utcnow().isoformat()
-    conn.execute(
-        'DELETE FROM password_reset_tokens WHERE user_id = ? AND used = 1',
-        (user_id,),
-    )
-    conn.execute(
-        'DELETE FROM password_reset_tokens WHERE user_id = ? AND used = 0 AND expires_at < ?',
-        (user_id, now),
-    )
-    conn.execute(
-        'UPDATE password_reset_tokens SET used = 1 WHERE user_id = ? AND used = 0',
-        (user_id,),
-    )
+    """Replace any existing reset tokens with a fresh one."""
+    expires = datetime.utcnow() + timedelta(hours=PASSWORD_RESET_HOURS)
+    expires_val = expires if use_postgres() else expires.isoformat()
+    conn.execute('DELETE FROM password_reset_tokens WHERE user_id = ?', (user_id,))
     conn.execute(
         'INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)',
-        (user_id, _hash_reset_token(token), expires),
+        (user_id, _hash_reset_token(token), expires_val),
+    )
+    conn.commit()
+
+
+def _clear_password_reset_token(conn, user_id: int, token: str) -> None:
+    conn.execute(
+        'DELETE FROM password_reset_tokens WHERE user_id = ? AND token_hash = ?',
+        (user_id, _hash_reset_token(token)),
     )
     conn.commit()
 
@@ -533,18 +530,22 @@ def forgot_password():
 
         conn = get_db()
         row = conn.execute(
-            'SELECT id, email, password_hash FROM users WHERE email = ?', (email,)
+            'SELECT id, email FROM users WHERE email = ?', (email,)
         ).fetchone()
 
-        if row and (row['password_hash'] or '').strip():
+        if row:
+            token = secrets.token_urlsafe(32)
+            reset_url = f"{_app_base_url()}{url_for('reset_password', token=token)}"
             try:
-                token = secrets.token_urlsafe(32)
-                reset_url = f"{_app_base_url()}{url_for('reset_password', token=token)}"
-                send_password_reset_email(row['email'], reset_url)
                 _save_password_reset_token(conn, row['id'], token)
+                send_password_reset_email(row['email'], reset_url)
             except Exception as exc:
+                try:
+                    _clear_password_reset_token(conn, row['id'], token)
+                except Exception:
+                    pass
                 conn.close()
-                app.logger.exception('Password reset email failed')
+                app.logger.exception('Password reset email failed for %s', email)
                 flash(f'Could not send reset email: {exc}', 'error')
                 return render_template('forgot_password.html', email=email)
         conn.close()
